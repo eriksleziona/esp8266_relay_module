@@ -101,7 +101,24 @@ Per relay topics:
 - `home/esp8266-relay4/3/state`
 - `home/esp8266-relay4/4/set`
 - `home/esp8266-relay4/4/state`
+- `home/esp8266-relay4/status`
 - `home/esp8266-relay4/availability`
+
+The `status` topic publishes a retained JSON snapshot of the whole board, for example:
+
+```json
+{
+  "device_id": "esp8266-relay4_abcdef123456",
+  "device_name": "ESP8266 4CH Relay",
+  "availability": "online",
+  "relays": {
+    "1": "OFF",
+    "2": "ON",
+    "3": "OFF",
+    "4": "OFF"
+  }
+}
+```
 
 ### Supported Commands
 

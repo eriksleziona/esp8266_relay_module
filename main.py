@@ -23,6 +23,7 @@ DEVICE_NAME = "ESP8266 4CH Relay"
 DEVICE_PREFIX = "esp8266-relay4"
 DISCOVERY_PREFIX = "homeassistant"
 BASE_TOPIC = "home/%s" % DEVICE_PREFIX
+STATE_JSON_TOPIC = "%s/status" % BASE_TOPIC
 
 # Most 4-channel ESP8266 relay boards are active LOW.
 RELAY_ON_LEVEL = 0
@@ -80,6 +81,7 @@ DEVICE_ID = "%s_%s" % (
 CLIENT_ID = DEVICE_ID.encode()
 AVAILABILITY_TOPIC = "%s/availability" % BASE_TOPIC
 AVAILABILITY_TOPIC_BYTES = AVAILABILITY_TOPIC.encode()
+STATE_JSON_TOPIC_BYTES = STATE_JSON_TOPIC.encode()
 
 wlan = network.WLAN(network.STA_IF)
 client = None
@@ -134,8 +136,24 @@ def publish_json(topic, payload, retain=False):
     publish_bytes(topic, ujson.dumps(payload), retain)
 
 
-def publish_state(relay, retain=True):
+def publish_board_state(retain=True):
+    relays = {}
+    for relay in RELAYS:
+        relays[str(relay["channel"])] = relay["state"]
+
+    payload = {
+        "device_id": DEVICE_ID,
+        "device_name": DEVICE_NAME,
+        "availability": "online" if wlan.isconnected() else "offline",
+        "relays": relays,
+    }
+    publish_json(STATE_JSON_TOPIC_BYTES, payload, retain)
+
+
+def publish_state(relay, retain=True, publish_snapshot=True):
     publish_bytes(relay["state_topic"], relay["state"], retain)
+    if publish_snapshot:
+        publish_board_state(retain)
     print("State:", relay["name"], relay["state"])
 
 
@@ -222,8 +240,9 @@ def publish_discovery():
 
 def publish_all_states():
     for relay in RELAYS:
-        publish_state(relay, True)
+        publish_state(relay, True, False)
         time.sleep_ms(50)
+    publish_board_state(True)
 
 
 def prepare_relays():
