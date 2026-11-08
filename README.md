@@ -14,6 +14,7 @@ This is useful for normal relay switching and also for short trigger actions lik
 
 - ESP8266 / NodeMCU
 - 4-channel relay board
+- DHT11 temperature and humidity sensor
 - MQTT broker such as Mosquitto
 - Home Assistant with the MQTT integration enabled
 
@@ -25,6 +26,18 @@ This is useful for normal relay switching and also for short trigger actions lik
 - Relay 4 -> GPIO12 (`D6`)
 
 The script assumes an active LOW relay module, which is the most common type for ESP8266 relay boards.
+
+### DHT11 Sensor Wiring
+
+Connect the DHT11 to the ESP8266 as follows:
+
+| DHT11 | NodeMCU | ESP8266 GPIO |
+| --- | --- | --- |
+| VCC / `+` | `3V3` | 3.3 V |
+| DATA / `OUT` | `D7` | GPIO13 |
+| GND / `-` | `GND` | GND |
+
+The firmware reads the sensor every 5 seconds. If you have a bare four-pin DHT11, its pins are normally VCC, DATA, NC, GND when looking at the front grille; check the markings or datasheet for your sensor. Leave NC unconnected. Many three-pin sensor modules already include the required DATA pull-up. If yours does not, add a 4.7 kΩ–10 kΩ resistor between DATA and 3.3 V. Power the sensor from 3.3 V so the DATA signal is safe for the ESP8266.
 
 ## Files
 
@@ -101,6 +114,8 @@ Per relay topics:
 - `home/esp8266-relay4/3/state`
 - `home/esp8266-relay4/4/set`
 - `home/esp8266-relay4/4/state`
+- `home/esp8266-relay4/sensor/temperature/state`
+- `home/esp8266-relay4/sensor/humidity/state`
 - `home/esp8266-relay4/status`
 - `home/esp8266-relay4/availability`
 
@@ -140,8 +155,9 @@ The script automatically publishes MQTT discovery config to:
 
 - `homeassistant/switch/.../config` for `switch` relays
 - `homeassistant/button/.../config` for `button` relays
+- `homeassistant/sensor/.../config` for DHT11 temperature and humidity
 
-After the ESP8266 connects to WiFi and MQTT, Home Assistant should discover the entities automatically.
+After the ESP8266 connects to WiFi and MQTT, Home Assistant should discover the relay and DHT11 entities automatically.
 
 ## Install
 
