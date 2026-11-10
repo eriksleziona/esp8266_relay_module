@@ -1,4 +1,5 @@
 import gc
+import dht
 import machine
 import network
 import time
@@ -32,6 +33,10 @@ RELAY_OFF_LEVEL = 1
 WIFI_CONNECT_TIMEOUT_S = 20
 RECONNECT_DELAY_S = 5
 MQTT_PING_INTERVAL_MS = 30000
+SENSOR_PUBLISH_INTERVAL_MS = 5000
+
+# NodeMCU D7 = GPIO13. Keep this separate from the relay pins below.
+DHT_PIN = 13
 
 # NodeMCU pin mapping:
 # D1 = GPIO5, D2 = GPIO4, D5 = GPIO14, D6 = GPIO12
@@ -87,6 +92,8 @@ wlan = network.WLAN(network.STA_IF)
 client = None
 last_ping_ms = 0
 command_topics = {}
+dht_sensor = None
+last_sensor_read_ms = None
 
 
 def slugify(value):
@@ -148,6 +155,72 @@ def publish_board_state(retain=True):
         "relays": relays,
     }
     publish_json(STATE_JSON_TOPIC_BYTES, payload, retain)
+
+
+def publish_sensor_discovery():
+    sensors = [
+        {
+            "key": "temperature",
+            "name": "Temperature",
+            "device_class": "temperature",
+            "unit": "°C",
+        },
+        {
+            "key": "humidity",
+            "name": "Humidity",
+            "device_class": "humidity",
+            "unit": "%",
+        },
+    ]
+
+    for sensor in sensors:
+        object_id = "%s_%s" % (DEVICE_PREFIX, sensor["key"])
+        unique_id = "%s_%s" % (DEVICE_ID, sensor["key"])
+        state_topic = "%s/sensor/%s/state" % (BASE_TOPIC, sensor["key"])
+        topic = "%s/sensor/%s/config" % (DISCOVERY_PREFIX, object_id)
+        payload = {
+            "name": sensor["name"],
+            "unique_id": unique_id,
+            "object_id": object_id,
+            "state_topic": state_topic,
+            "availability_topic": AVAILABILITY_TOPIC,
+            "payload_available": "online",
+            "payload_not_available": "offline",
+            "device_class": sensor["device_class"],
+            "state_class": "measurement",
+            "unit_of_measurement": sensor["unit"],
+            "device": device_payload(),
+        }
+        publish_json(topic, payload, True)
+        time.sleep_ms(100)
+        gc.collect()
+
+
+def publish_sensor_readings():
+    global last_sensor_read_ms
+
+    try:
+        dht_sensor.measure()
+        temperature = dht_sensor.temperature()
+        humidity = dht_sensor.humidity()
+    except Exception as error:
+        print("DHT11 read error:", error)
+        last_sensor_read_ms = time.ticks_ms()
+        return
+
+    publish_bytes(
+        "%s/sensor/temperature/state" % BASE_TOPIC,
+        str(temperature),
+        True,
+    )
+    publish_bytes(
+        "%s/sensor/humidity/state" % BASE_TOPIC,
+        str(humidity),
+        True,
+    )
+    print("DHT11:", temperature, "°C,", humidity, "%")
+
+    last_sensor_read_ms = time.ticks_ms()
 
 
 def publish_state(relay, retain=True, publish_snapshot=True):
@@ -266,6 +339,11 @@ def prepare_relays():
         command_topics[relay["command_topic"]] = relay
 
 
+def prepare_sensor():
+    global dht_sensor
+    dht_sensor = dht.DHT11(Pin(DHT_PIN))
+
+
 def mqtt_callback(topic, msg):
     relay = command_topics.get(topic)
     if relay is None:
@@ -359,6 +437,7 @@ def connect_mqtt():
 
     publish_bytes(AVAILABILITY_TOPIC_BYTES, b"online", True)
     publish_discovery()
+    publish_sensor_discovery()
     publish_all_states()
     last_ping_ms = time.ticks_ms()
 
@@ -378,6 +457,7 @@ def main():
     global last_ping_ms
 
     prepare_relays()
+    prepare_sensor()
     print("Device ID:", DEVICE_ID)
 
     while True:
@@ -386,6 +466,13 @@ def main():
             client.check_msg()
 
             now = time.ticks_ms()
+            if (
+                last_sensor_read_ms is None
+                or time.ticks_diff(now, last_sensor_read_ms)
+                >= SENSOR_PUBLISH_INTERVAL_MS
+            ):
+                publish_sensor_readings()
+
             if time.ticks_diff(now, last_ping_ms) >= MQTT_PING_INTERVAL_MS:
                 client.ping()
                 last_ping_ms = now
