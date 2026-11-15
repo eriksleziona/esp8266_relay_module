@@ -218,7 +218,7 @@ def publish_sensor_readings():
         str(humidity),
         True,
     )
-    print("DHT11:", temperature, "°C,", humidity, "%")
+    print("DHT22:", temperature, "°C,", humidity, "%")
 
     last_sensor_read_ms = time.ticks_ms()
 
@@ -341,7 +341,7 @@ def prepare_relays():
 
 def prepare_sensor():
     global dht_sensor
-    dht_sensor = dht.DHT11(Pin(DHT_PIN))
+    dht_sensor = dht.DHT22(Pin(DHT_PIN))
 
 
 def mqtt_callback(topic, msg):
